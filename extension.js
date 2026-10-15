@@ -9,7 +9,7 @@ import {readFileText, isCancelledError} from './src/shared/asyncIo.js';
 import {importSettingsFromJSON, probeImportIconPaths, saveSettingsToFile, isOwnSyncSource} from './src/shared/settingsIO.js';
 import {clearIds, debounceTo, disconnectSignal, disconnectAll, disposeAll, removeTimer} from './src/shared/lifecycle.js';
 import {clearSeenCache, userConfigSignature} from './src/shared/appConfig.js';
-import {clearDetachedMenuManager, clearMenuLayer} from './src/shell/popupMenus.js';
+import {clearDetachedMenuManager, clearFlyoutMenus} from './src/shell/popupMenus.js';
 import {placeIndicatorInPanel, TrayButton} from './src/shell/components/trayButton.js';
 import {clearIconCaches} from './src/shell/icons/iconResolver.js';
 import {enableLauncherEntries, disableLauncherEntries} from './src/shell/features/launcherEntries.js';
@@ -70,8 +70,8 @@ export default class BetterTrayIconsExtension extends Extension {
         // own destroy() override.
         disposeAll(this, 'destroy', '_indicator', '_trayButton');
         disableLauncherEntries();
+        clearFlyoutMenus();
         clearDetachedMenuManager();
-        clearMenuLayer();
         clearIconCaches();
         clearSeenCache();
         clearItemSplits();

@@ -31,23 +31,6 @@ export function menuAnimation(animate) {
 export const POPUP_ANIMATION_NONE = menuAnimation(false);
 export const POPUP_ANIMATION_FULL = menuAnimation(true);
 
-let _menuLayer = null;
-
-// A flyout's grab has to cover the menu it came from, or that menu goes
-// dead under it.
-function menuLayer() {
-    if (!_menuLayer) {
-        _menuLayer = new Clutter.Actor();
-        Main.layoutManager.uiGroup.add_child(_menuLayer);
-    }
-    return _menuLayer;
-}
-
-export function clearMenuLayer() {
-    _menuLayer?.destroy();
-    _menuLayer = null;
-}
-
 export function createPanelMenu(sourceActor, {configure = null, ownSurface = false} = {}) {
     const menu = new PopupMenu.PopupMenu(sourceActor, 0.5, St.Side.TOP);
     menu.actor.add_style_class_name('panel-menu');
@@ -64,7 +47,7 @@ export function createPanelMenu(sourceActor, {configure = null, ownSurface = fal
             applyMenuBoxStyle(menu);
     });
 
-    menuLayer().add_child(menu.actor);
+    Main.layoutManager.uiGroup.add_child(menu.actor);
     menu.actor.hide();
     return menu;
 }
@@ -162,14 +145,22 @@ export function destroyMenuSafely(menu) {
     menu.destroy();
 }
 
-// For a submenu with no room to unfold inline. It grabs the shared layer
-// itself, the shell's menu manager would close the menu underneath.
+const _flyoutMenus = [];
+let _flyoutGrabState = null;
+
+export function clearFlyoutMenus() {
+    for (const menu of [..._flyoutMenus].reverse())
+        menu._releaseGrab();
+    _flyoutMenus.length = 0;
+    _flyoutGrabState = null;
+}
+
 export class FlyoutMenu extends PopupMenu.PopupMenu {
     constructor(item) {
         super(item, 0, St.Side.LEFT);
         this._grab = null;
         this._capturedEventId = 0;
-        menuLayer().add_child(this.actor);
+        Main.layoutManager.uiGroup.add_child(this.actor);
         this.actor.hide();
         this.connect('open-state-changed', (menu, isOpen) => {
             if (!isOpen) {
@@ -186,7 +177,14 @@ export class FlyoutMenu extends PopupMenu.PopupMenu {
     }
 
     _takeGrab() {
-        const layer = menuLayer();
+        const layer = Main.layoutManager.uiGroup;
+        if (_flyoutMenus.length === 0) {
+            _flyoutGrabState = {
+                reactive: layer.reactive,
+                sourceActor: layer._sourceActor,
+            };
+        }
+        _flyoutMenus.push(this);
         // Clutter only delivers to reactive actors, the grab alone sees nothing
         layer.reactive = true;
         this._grab = Main.pushModal(layer, {actionMode: Shell.ActionMode.POPUP});
@@ -200,26 +198,43 @@ export class FlyoutMenu extends PopupMenu.PopupMenu {
     _releaseGrab() {
         if (!this._grab)
             return;
-        const layer = menuLayer();
+        const layer = Main.layoutManager.uiGroup;
         disconnectSignal(this, layer, '_capturedEventId');
-        layer._sourceActor = null;
-        layer.reactive = false;
         Main.popModal(this._grab);
         this._grab = null;
+
+        _flyoutMenus.splice(_flyoutMenus.indexOf(this), 1);
+        if (_flyoutMenus.length > 0) {
+            layer._sourceActor = menuChainFrom(_flyoutMenus.at(-1)).at(-1).sourceActor;
+        } else {
+            layer.reactive = _flyoutGrabState.reactive;
+            if (_flyoutGrabState.sourceActor === undefined)
+                delete layer._sourceActor;
+            else
+                layer._sourceActor = _flyoutGrabState.sourceActor;
+            _flyoutGrabState = null;
+        }
     }
 
     _onCapturedEvent(event) {
-        const type = event.type();
-        if (type === Clutter.EventType.KEY_PRESS)
-            return this._handleFlyoutKey(event);
-
-        const isPress = type === Clutter.EventType.BUTTON_PRESS ||
-            type === Clutter.EventType.TOUCH_BEGIN;
-        if (!isPress)
+        // Nested flyouts share the capture actor; only the top grab handles input.
+        if (_flyoutMenus.at(-1) !== this)
             return Clutter.EVENT_PROPAGATE;
+
+        const type = event.type();
+        if (type === Clutter.EventType.KEY_PRESS &&
+            this._handleFlyoutKey(event) === Clutter.EVENT_STOP)
+            return Clutter.EVENT_STOP;
 
         const target = global.stage.get_event_actor(event);
         const chain = menuChainFrom(this);
+        const isPress = type === Clutter.EventType.BUTTON_PRESS ||
+            type === Clutter.EventType.TOUCH_BEGIN;
+        if (!isPress) {
+            return chain.some(menu => menu.actor.contains(target))
+                ? Clutter.EVENT_PROPAGATE : Clutter.EVENT_STOP;
+        }
+
         // Every link but the last hangs off a menu item. A press on that item
         // runs its own toggle, closing here would let the release reopen it.
         const toggled = chain.slice(0, -1).find(menu => menu.sourceActor.contains(target));
