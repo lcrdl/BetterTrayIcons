@@ -1,5 +1,6 @@
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
+import Shell from 'gi://Shell';
 
 import {warn, warnOnce} from '../../shared/logging.js';
 import {
@@ -86,6 +87,7 @@ export class TrayIcon {
 
         this._menu = null;
         this._menuDropId = 0;
+        this._activateId = 0;
         this._menuClient = null;
         this._tooltip = null;
         this._clickController = null;
@@ -350,7 +352,8 @@ export class TrayIcon {
     }
 
     // Activate on an item whose window sits on another workspace did nothing
-    // visible, so raise through the shell instead.
+    // visible, so raise through the shell instead. A focused app still gets
+    // the Activate, tray apps toggle their window on it.
     _activate() {
         const app = runningApp({
             pid: this._pid,
@@ -362,7 +365,17 @@ export class TrayIcon {
             return;
         }
         this._onCloseMenu();
-        raiseApp(app);
+        if (app !== Shell.WindowTracker.get_default().focus_app) {
+            raiseApp(app);
+            return;
+        }
+        if (getAppConfigValue(this._settings, this.appId, 'minimize_when_focused', false)) {
+            app.get_windows().forEach(window => window.minimize());
+            return;
+        }
+        // The app gets keyboard focus back from the popup grab only on the
+        // next turn, and without it reads the Activate as show, not toggle.
+        debounceTo(this, '_activateId', 0, () => this._fireAndClose('ActivateRemote'));
     }
 
     // Items without Activate answer UnknownMethod, the click did nothing
@@ -624,7 +637,7 @@ export class TrayIcon {
         disposeAll(this, 'destroy', '_draggable', '_clickController', '_tooltip');
         disconnectSignal(this, this._settings, '_settingsConnectId');
         disposeAll(this, 'disconnect', '_colorSetWatch');
-        clearIds(this, removeTimer, '_updateDeferId', '_titleDeferId', '_menuDropId');
+        clearIds(this, removeTimer, '_updateDeferId', '_titleDeferId', '_menuDropId', '_activateId');
 
         disconnectAll(this, this._proxy, '_proxySignals', 'disconnectSignal');
         disconnectAll(this, this._proxy, '_gObjectSignals');

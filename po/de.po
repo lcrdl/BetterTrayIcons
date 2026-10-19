@@ -198,6 +198,9 @@ msgstr "Löscht alle gespeicherten Einstellungen dieser App."
 msgid "Detected Apps"
 msgstr "Erkannte Apps"
 
+msgid "Clicking the icon while the app is in front minimizes its windows."
+msgstr "Ein Klick auf das Icon minimiert die Fenster der App, wenn sie im Vordergrund ist."
+
 msgid "Don’t show this icon in the tray."
 msgstr "Dieses Icon nicht im Tray anzeigen."
 
@@ -399,6 +402,9 @@ msgstr "Weitere Farben"
 
 msgid "Middle Click"
 msgstr "Mittelklick"
+
+msgid "Minimize When in Front"
+msgstr "Im Vordergrund minimieren"
 
 msgid "Name"
 msgstr "Name"
