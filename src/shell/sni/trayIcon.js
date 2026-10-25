@@ -268,6 +268,9 @@ export class TrayIcon {
         this._tooltip = tooltip;
 
         this._iconActor = attachStatusIcon(this.actor);
+        // The resolved pixmap or SVG carries a fixed pixel size, so a new
+        // monitor scale needs a fresh resolve.
+        this._iconActor.connect('resource-scale-changed', this._guarded(() => this._queueUpdate()));
 
         connectSurfaceChanges(this.actor, this._guarded(() => this._applyColorSet()));
 

@@ -358,8 +358,11 @@ function _appIcon(pid) {
     return Shell.WindowTracker.get_default().get_app_from_pid(pid)?.get_icon();
 }
 
+// St rasterizes at ceil(scale factor x resource scale), and on a fractional
+// monitor the scale factor alone stays 1, so a smaller pixmap or SVG gets stretched.
 function _deviceIconSize(settings) {
-    return settings.get_int('icon-size') * stageScaleFactor();
+    const rasterScale = Math.ceil(stageScaleFactor() * global.stage.get_resource_scale());
+    return settings.get_int('icon-size') * rasterScale;
 }
 
 // Constructing St.IconTheme per resolution re-reads the theme index.
