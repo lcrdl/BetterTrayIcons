@@ -183,8 +183,13 @@ export class SniWatcher {
                 // org.kde.StatusNotifierItem-PID-ID, Chromium and Electron use
                 // the freedesktop variant when they claim a well-known name at all.
                 if (name.startsWith('org.kde.StatusNotifierItem') ||
-                    name.startsWith('org.freedesktop.StatusNotifierItem'))
-                    this._registerItem(name, DEFAULT_ITEM_OBJECT_PATH);
+                    name.startsWith('org.freedesktop.StatusNotifierItem')) {
+                    // Key by the unique owner, clients that registered by
+                    // path are already stored under it.
+                    const owner = await this._nameOwner(name);
+                    if (owner)
+                        this._registerItem(owner, DEFAULT_ITEM_OBJECT_PATH);
+                }
             }
         } catch (e) {
             warn(`SniWatcher: Initial scan failed: ${e.message}`);
@@ -212,7 +217,7 @@ export class SniWatcher {
                 );
                 return;
             }
-            busName = service;
+            busName = sender || service;
         }
 
         this._registerItem(busName, objectPath);
